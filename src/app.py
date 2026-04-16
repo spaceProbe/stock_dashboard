@@ -144,7 +144,7 @@ def dashboard_fragment():
         if "view_mode" not in st.session_state:
             st.session_state["view_mode"] = "historical"
 
-        col_toggle, col_header = st.columns([0.15, 0.85])
+        col_toggle, col_header = st.columns([0.03, 0.97])
         
         with col_toggle:
             if st.button("⇄", help="Switch View"):
@@ -229,22 +229,49 @@ def dashboard_fragment():
                         st.warning("No historical data can be found for aggregation.")
             else:
                 # Daily Performance View (Zoomed in from today's open)
-                daily_pnl = stock_service.get_daily_performance(holdings, period="1d", interval="5m")
-                if not daily_pnl.empty:
-                    # Use a line chart to show the running cumulative P/L throughout the day
-                    cumulative_pnl = daily_pnl.cumsum()
-                    fig_daily = go.Figure(data=[go.Scatter(x=cumulative_pnl.index, y=cumulative_pnl.values, mode='lines', name='Cumulative P/L', line=dict(color='#00cc96'))])
-                    fig_daily.update_layout(
-                        margin=dict(l=0, r=0, t=30, b=0), 
-                        height=400, 
-                        template="plotly_dark", 
-                        title="Intraday Cumulative P/L ($)",
-                        xaxis_title="Time",
-                        yaxis_title="P/L ($)"
-                    )
-                    st.plotly_chart(fig_daily, width="stretch")
+                chart_mode_daily = st.radio(
+                    "View Chart For:",
+                    ["Stock Price", "Portfolio Value", "Post-Tax Value", "Profit"],
+                    horizontal=True,
+                    key="chart_mode_daily_selector"
+                )
+
+                if chart_mode_daily == "Stock Price":
+                    # Show individual price lines for each ticker
+                    all_hist = stock_service.get_all_holdings_history(holdings, period="1d", interval="5m")
+                    if all_hist is not None and not all_hist.empty:
+                        fig_daily = go.Figure()
+                        for ticker in all_hist.columns:
+                            fig_daily.add_trace(go.Scatter(x=all_hist.index, y=all_hist[ticker], mode='lines', name=ticker))
+                        fig_daily.update_layout(
+                            margin=dict(l=0, r=0, t=30, b=0), 
+                            height=400, 
+                            template="plotly_dark", 
+                            title="Intraday Stock Prices",
+                            xaxis_title="Time",
+                            yaxis_title="Price ($)"
+                        )
+                        st.plotly_chart(fig_daily, width="stretch")
+                    else:
+                        st.warning("No intraday price data available for today.")
                 else:
-                    st.warning("No daily performance data available for today.")
+                    # Implement other modes by leveraging the existing logic
+                    daily_pnl = stock_service.get_daily_performance(holdings, period="1d", interval="5m")
+                    if not daily_pnl.empty:
+                        cumulative_pnl = daily_pnl.cumsum()
+                        fig_daily = go.Figure(data=[go.Scatter(x=cumulative_pnl.index, y=cumulative_pnl.values, mode='lines', name='Cumulative P/L', line=dict(color='#00cc96'))])
+                        fig_daily.update_layout(
+                            margin=dict(l=0, r=0, t=30, b=0), 
+                            height=400, 
+                            template="plotly_dark", 
+                            title=f"Intraday {chart_mode_daily} ($)",
+                            xaxis_title="Time",
+                            yaxis_title="P/L ($)"
+                        )
+                        st.plotly_chart(fig_daily, width="stretch")
+                    else:
+                        st.warning("No daily performance data available for today.")
+
 
 
 
