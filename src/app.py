@@ -9,8 +9,9 @@ from src.calculation_engine import CalculationEngine
 
 st.set_page_config(page_title="Stock Value Viewer", layout="wide")
 
-st.title("📈 Stock Value Viewer")
-st.write(f"**Current Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# Remove the main title and date display from the top to save space
+# st.title("📈 Stock Value Viewer")
+# st.write(f"**Current Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 # Initialize Managers
 manager = PortfolioManager("holdings.yaml")
@@ -18,6 +19,8 @@ stock_service = StockService()
 
 if "active_chart_ticker" not in st.session_state:
     st.session_state["active_chart_ticker"] = None
+
+# (Rest of the code will be updated by the refactor)
 
 def on_table_selection_change(selected_ticker):
     st.session_state["active_chart_ticker"] = selected_ticker
@@ -165,29 +168,42 @@ def dashboard_fragment():
                 )
                 if chart_mode == "Stock Price":
                     # Always show the selectbox so the user can always switch back
+                    all_tickers = ["All Stocks"] + [h['ticker'] for h in holdings]
                     selected_ticker = st.selectbox(
                         "Select Ticker for Chart", 
-                        [h['ticker'] for h in holdings], 
+                        all_tickers, 
                         key="chart_ticker_selector",
                         on_change=on_selectbox_change
                     )
 
-                    # Override with the active chart ticker if it exists and is different from selectbox
-                    if st.session_state["active_chart_ticker"] and st.session_state["active_chart_ticker"] != selected_ticker:
-                        selected_ticker = st.session_state["active_chart_ticker"]
-                        st.info(f"📍 Table Selection active: **{selected_ticker}**")
-
-                    hist_data = stock_service.get_historical_data(selected_ticker)
-                    if hist_data is not None:
-                        latest_price = stock_service.get_current_price(selected_ticker)
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['Close'], mode='lines', name='Price', line=dict(color='#00cc96')))
-                        if latest_price is not None:
-                            fig.add_trace(go.Scatter(x=[hist_data.index[-1]], y=[latest_price], mode='markers', name='Live', marker=dict(color='#ff4b4b', size=12)))
-                        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=400, template="plotly_dark", showlegend=False)
-                        st.plotly_chart(fig, width="stretch")
+                    if selected_ticker == "All Stocks":
+                        # Show all stocks in historical view (using all_hist columns)
+                        all_hist = stock_service.get_all_holdings_history(holdings)
+                        if all_hist is not None and not all_hist.empty:
+                            fig = go.Figure()
+                            for ticker in all_hist.columns:
+                                fig.add_trace(go.Scatter(x=all_hist.index, y=all_hist[ticker], mode='lines', name=ticker))
+                            fig.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=400, template="plotly_dark", showlegend=True)
+                            st.plotly_chart(fig, width="stretch")
+                        else:
+                            st.warning("No historical data available for all stocks.")
                     else:
-                        st.warning("No historical data available.")
+                        # Override with the active chart ticker if it exists and is different from selectbox
+                        if st.session_state["active_chart_ticker"] and st.session_state["active_chart_ticker"] != selected_ticker:
+                            selected_ticker = st.session_state["active_chart_ticker"]
+                            st.info(f"📍 Table Selection active: **{selected_ticker}**")
+
+                        hist_data = stock_service.get_historical_data(selected_ticker)
+                        if hist_data is not None:
+                            latest_price = stock_service.get_current_price(selected_ticker)
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['Close'], mode='lines', name='Price', line=dict(color='#00cc96')))
+                            if latest_price is not None:
+                                fig.add_trace(go.Scatter(x=[hist_data.index[-1]], y=[latest_price], mode='markers', name='Live', marker=dict(color='#ff4b4b', size=12)))
+                            fig.update_layout(margin=dict(l=0, r=0, t=30, b=0), height=400, template="plotly_dark", showlegend=False)
+                            st.plotly_chart(fig, width="stretch")
+                        else:
+                            st.warning("No historical data available.")
                 elif chart_mode in ["Portfolio Value", "Post-Tax Value", "Profit"]:
                     # Aggregate mode logic
                     all_hist = stock_service.get_all_holdings_history(holdings)
@@ -229,6 +245,7 @@ def dashboard_fragment():
                         st.warning("No historical data can be found for aggregation.")
             else:
                 # Daily Performance View (Zoomed in from today's open)
+                st.subheader("Daily Performance")
                 chart_mode_daily = st.radio(
                     "View Chart For:",
                     ["Stock Price", "Portfolio Value", "Post-Tax Value", "Profit"],
@@ -238,33 +255,70 @@ def dashboard_fragment():
 
                 if chart_mode_daily == "Stock Price":
                     # Show individual price lines for each ticker
-                    all_hist = stock_service.get_all_holdings_history(holdings, period="1d", interval="5m")
-                    if all_hist is not None and not all_hist.empty:
-                        fig_daily = go.Figure()
-                        for ticker in all_hist.columns:
-                            fig_daily.add_trace(go.Scatter(x=all_hist.index, y=all_hist[ticker], mode='lines', name=ticker))
-                        fig_daily.update_layout(
-                            margin=dict(l=0, r=0, t=30, b=0), 
-                            height=400, 
-                            template="plotly_dark", 
-                            title="Intraday Stock Prices",
-                            xaxis_title="Time",
-                            yaxis_title="Price ($)"
-                        )
-                        st.plotly_chart(fig_daily, width="stretch")
+                    all_tickers = ["All Stocks"] + [h['ticker'] for h in holdings]
+                    selected_daily_ticker = st.selectbox("Select Ticker (Daily):", all_tickers, key="daily_ticker_selector_price")
+
+                    if selected_daily_ticker == "All Stocks":
+                        all_hist = stock_service.get_all_holdings_history(holdings, period="1d", interval="5m")
+                        if all_hist is not None and not all_hist.empty:
+                            fig_daily = go.Figure()
+                            for ticker in all_hist.columns:
+                                fig_daily.add_trace(go.Scatter(x=all_hist.index, y=all_hist[ticker], mode='lines', name=ticker))
+                            fig_daily.update_layout(
+                                margin=dict(l=0, r=0, t=30, b=0), 
+                                height=400, 
+                                template="plotly_dark", 
+                                title="Intraday Stock Prices",
+                                xaxis_title="Time",
+                                yaxis_title="Price ($)"
+                            )
+                            st.plotly_chart(fig_daily, width="stretch")
+                        else:
+                            st.warning("No intraday price data available for today.")
                     else:
-                        st.warning("No intraday price data available for today.")
+                        # Fetch price for specific ticker
+                        hist_data = stock_service.get_historical_data(selected_daily_ticker)
+                        if hist_data is not None and not hist_data.empty:
+                            latest_price = stock_service.get_current_price(selected_daily_ticker)
+                            fig_daily = go.Figure()
+                            fig_daily.add_trace(go.Scatter(x=hist_data.index, y=hist_data['Close'], mode='lines', name='Price', line=dict(color='#00cc96')))
+                            if latest_price is not None:
+                                fig_daily.add_trace(go.Scatter(x=[hist_data.index[-1]], y=[latest_price], mode='markers', name='Live', marker=dict(color='#ff4b4b', size=12)))
+                            fig_daily.update_layout(
+                                margin=dict(l=0, r=0, t=30, b=0), 
+                                height=400, 
+                                template="plotly_dark", 
+                                title=f"Intraday Price: {selected_daily_ticker} ($)",
+                                xaxis_title="Time",
+                                yaxis_title="Price ($)"
+                            )
+                            st.plotly_chart(fig_daily, width="stretch")
+                        else:
+                            st.warning("No intraday price data available for this ticker.")
                 else:
                     # Implement other modes by leveraging the existing logic
-                    daily_pnl = stock_service.get_daily_performance(holdings, period="1d", interval="5m")
+                    
+                    # Add ticker selection for daily mode
+                    all_tickers = ["All Stocks"] + [h['ticker'] for h in holdings]
+                    selected_daily_ticker = st.selectbox("Select Ticker (Daily):", all_tickers, key="daily_ticker_selector")
+
+                    if selected_daily_ticker == "All Stocks":
+                        daily_pnl = stock_service.get_daily_performance(holdings, period="1d", interval="5m")
+                    else:
+                        # Fetch daily performance for a single ticker
+                        target_holdings = [h for h in holdings if h['ticker'] == selected_daily_ticker]
+                        daily_pnl = stock_service.get_daily_performance(target_holdings, period="1d", interval="5m")
+
                     if not daily_pnl.empty:
                         cumulative_pnl = daily_pnl.cumsum()
-                        fig_daily = go.Figure(data=[go.Scatter(x=cumulative_pnl.index, y=cumulative_pnl.values, mode='lines', name='Cumulative P/L', line=dict(color='#00cc96'))])
+                        # Determine color based on last value change
+                        color = '#00cc96' if daily_pnl.iloc[-1] >= 0 else '#ff4b4b'
+                        fig_daily = go.Figure(data=[go.Scatter(x=cumulative_pnl.index, y=cumulative_pnl.values, mode='lines', name='Cumulative P/L', line=dict(color=color))])
                         fig_daily.update_layout(
                             margin=dict(l=0, r=0, t=30, b=0), 
                             height=400, 
                             template="plotly_dark", 
-                            title=f"Intraday {chart_mode_daily} ($)",
+                            title=f"Intraday {chart_mode_daily} ({selected_daily_ticker}) ($)",
                             xaxis_title="Time",
                             yaxis_title="P/L ($)"
                         )
