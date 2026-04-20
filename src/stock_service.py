@@ -1,10 +1,10 @@
 import yfinance as yf
 import streamlit as st
 import pandas as pd
+from datetime import datetime, time
 
 class StockService:
     @staticmethod
-    @st.cache_data(ttl=300)
     def get_historical_data(ticker, period="1mo", interval="1d"):
         try:
             stock = yf.Ticker(ticker)
@@ -14,6 +14,11 @@ class StockService:
             return hist
         except Exception:
             return None
+
+    @staticmethod
+    def get_historical_pattern(ticker, period="1d", interval="5m"):
+        """Alias for compatibility with app.py call."""
+        return StockService.get_historical_data(ticker, period, interval)
 
     @staticmethod
     def get_current_price(ticker):
@@ -69,3 +74,5 @@ class StockService:
                 daily_pnl += price_change * qty
         
         return daily_pnl
+
+
